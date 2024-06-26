@@ -14,8 +14,13 @@
       if (event.altKey) {
         body = textEl.innerText;
       } else {
-        body = textEl.innerHTML.replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+        body = textEl.innerHTML
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&nbsp;/g, " ")
       }
+
+      if (!body) return;
 
       const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
       const hashArray = Array.from(new Uint8Array(digest));
@@ -23,6 +28,8 @@
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
       const id = hashHex.slice(0, 10);
+
+      console.log(id)
 
       const res = await fetch(`/${id}`, {
         method: "POST",
@@ -43,5 +50,11 @@
     width: 100%;
     height: 100%;
     outline: none;
+
+    &:empty:before {
+      content: "请输入任意内容，按 Cmd/Ctrl + S 保存，或者按 Cmd/Ctrl + Alt + S 保存纯文本";
+      color: #aaa;
+      cursor: text;
+    }
   }
 </style>
