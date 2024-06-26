@@ -1,0 +1,15 @@
+{
+  "name": "text",
+  "module": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "watch": "bun --watch src/index.ts",
+    "start": "bun src/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
