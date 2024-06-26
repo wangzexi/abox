@@ -9,14 +9,15 @@
         return;
       event.preventDefault();
 
-      const body = document
-        .querySelector("#text")
-        .innerHTML.replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">");
+      const textEl = document.querySelector("#text");
+      let body;
+      if (event.altKey) {
+        body = textEl.innerText;
+      } else {
+        body = textEl.innerHTML.replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+      }
 
-      const bodyBuf = new TextEncoder().encode(body);
-
-      const digest = await crypto.subtle.digest("SHA-256", bodyBuf);
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
       const hashArray = Array.from(new Uint8Array(digest));
       const hashHex = hashArray
         .map((b) => b.toString(16).padStart(2, "0"))
@@ -25,9 +26,6 @@
 
       const res = await fetch(`/${id}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "text/html",
-        },
         body,
       });
 

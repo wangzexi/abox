@@ -15,9 +15,25 @@ Bun.serve({
       if (req.method === "GET") {
         const file = Bun.file(path);
         if (await file.exists()) {
-          return new Response(file, {
-            headers: { "Content-Type": "text/html; charset=utf-8" },
-          });
+          const text = await file.text()
+          
+          let contentType: string = 'text/plain'
+          
+          if (/<(\w+)>.+<\/\1>/.test(text)) {
+            contentType = 'text/html'
+          }
+
+          try {
+            JSON.parse(text)
+            contentType = 'application/json'
+          } catch (error) {}
+          
+          return new Response(
+            file,
+            {
+              headers: { "Content-Type": `${contentType}; charset=utf-8` },
+            }
+          );
         }
       } else if (req.method === "POST") {
         if (id) {
