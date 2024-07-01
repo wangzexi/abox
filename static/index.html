@@ -22,6 +22,7 @@
 
       if (!body) return;
 
+      // 计算内容哈希
       const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
       const hashArray = Array.from(new Uint8Array(digest));
       const hashHex = hashArray
@@ -29,11 +30,24 @@
         .join("");
       const id = hashHex.slice(0, 10);
 
-      console.log(id)
+      // 判断内容类型
+      let contentType = 'text/plain'
+
+      if (/<(\w+)[^>]*>.*<\/\1>/.test(body)) {
+        contentType = 'text/html'
+      }
+
+      try {
+        JSON.parse(body)
+        contentType = 'application/json'
+      } catch (error) {}
 
       const res = await fetch(`/${id}`, {
         method: "POST",
-        body,
+        headers: {
+          "Content-Type": contentType,
+        },
+        body
       });
 
       if (!res.ok) {
@@ -52,7 +66,7 @@
     outline: none;
 
     &:empty:before {
-      content: "请输入任意内容，按 Cmd/Ctrl + S 保存，或者按 Cmd/Ctrl + Alt + S 保存纯文本";
+      content: "请输入任意内容，按 Ctrl/Cmd + S 保存，或者按 Ctrl/Cmd + Alt + S 保存纯文本";
       color: #aaa;
       cursor: text;
     }
