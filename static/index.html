@@ -1,62 +1,97 @@
 <div id="text" contenteditable="true"></div>
 
 <script>
-  document
-    .querySelector("#text")
-    .addEventListener("keydown", async function (event) {
-      if (event.key !== "s") return;
-      if (!(navigator.platform.match("Mac") ? event.metaKey : event.ctrlKey))
-        return;
-      event.preventDefault();
+  async function getHashId(arrayBuffer) {
+    const digest = await crypto.subtle.digest("SHA-256", arrayBuffer);
+    const hashArray = Array.from(new Uint8Array(digest));
+    const hashHex = hashArray
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    return hashHex.slice(0, 10);
+  }
 
-      const textEl = document.querySelector("#text");
-      let body;
-      if (event.altKey) {
-        body = textEl.innerText;
-      } else {
-        body = textEl.innerHTML
+  const textEl = document.querySelector("#text");
+
+  textEl.addEventListener("keydown", async function (event) {
+    if (event.key !== "s") return;
+    if (!(navigator.platform.match("Mac") ? event.metaKey : event.ctrlKey))
+      return;
+    event.preventDefault();
+
+    let body;
+    if (event.altKey) {
+      body = textEl.innerText;
+    } else {
+      body = textEl.innerHTML
         .replace(/&lt;/g, "<")
         .replace(/&gt;/g, ">")
-        .replace(/&nbsp;/g, " ")
-      }
+        .replace(/&nbsp;/g, " ");
+    }
 
-      if (!body) return;
+    if (!body) return;
 
-      // 计算内容哈希
-      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
-      const hashArray = Array.from(new Uint8Array(digest));
-      const hashHex = hashArray
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-      const id = hashHex.slice(0, 10);
+    // 计算内容哈希
+    const id = await getHashId(new TextEncoder().encode(body));
 
-      // 判断内容类型
-      let contentType = 'text/plain'
+    // 判断内容类型
+    let contentType = "text/plain";
 
-      if (/<(\w+)[^>]*>.*<\/\1>/.test(body)) {
-        contentType = 'text/html'
-      }
+    if (/<(\w+)[^>]*>.*<\/\1>/.test(body)) {
+      contentType = "text/html";
+    }
 
-      try {
-        JSON.parse(body)
-        contentType = 'application/json'
-      } catch (error) {}
+    try {
+      JSON.parse(body);
+      contentType = "application/json";
+    } catch (error) {}
 
-      const res = await fetch(`/${id}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": contentType,
-        },
-        body
-      });
-
-      if (!res.ok) {
-        alert("Failed to save");
-        return;
-      }
-
-      window.location = `/${id}`;
+    const res = await fetch(`/${id}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": contentType,
+      },
+      body,
     });
+
+    if (!res.ok) {
+      alert("保存失败");
+      return;
+    }
+
+    window.location = `/${id}`;
+  });
+
+
+  // 文件拖放
+  textEl.addEventListener("dragover", (event) => {
+    event.preventDefault();
+  });
+
+  textEl.addEventListener("drop", async (event) => {
+    event.preventDefault();
+
+    const file = event.dataTransfer.files[0];
+    if (!file) return;
+
+    const body = await file.arrayBuffer();
+    const id = await getHashId(body);
+
+    const res = await fetch(`/${id}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": file.type,
+        "X-File-Extension": file.name.match(/\.(.+)$/)?.[1] || "",
+      },
+      body
+    });
+
+    if (!res.ok) {
+      alert("保存失败");
+      return;
+    }
+
+    window.location = `/${id}`;
+  });
 </script>
 
 <style>
@@ -66,7 +101,7 @@
     outline: none;
 
     &:empty:before {
-      content: "请输入任意内容，按 Ctrl/Cmd + S 保存，或者按 Ctrl/Cmd + Alt + S 保存纯文本";
+      content: "请输入内容，按 Ctrl/Cmd + S 保存，按 Ctrl/Cmd + Alt + S 保存纯文本，或者也可以拖放文件到此处";
       color: #aaa;
       cursor: text;
     }
