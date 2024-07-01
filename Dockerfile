@@ -1,4 +1,4 @@
-FROM oven/bun:latest
+FROM hub.zexi.me/oven/bun:latest
 
 WORKDIR /app
 
