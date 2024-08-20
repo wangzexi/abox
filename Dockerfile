@@ -6,6 +6,6 @@ COPY package.json ./
 COPY bun.lockb ./
 RUN bun install
 
-COPY src ./
+COPY . .
 
 CMD ["bun", "start"]
