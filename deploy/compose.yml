@@ -1,0 +1,8 @@
+services:
+  wenbox:
+    image: cr.zexi.love/app/wenbox:main
+    restart: unless-stopped
+    ports:
+      - 9430:3000
+    volumes:
+      - ./static/pages:/app/static/pages

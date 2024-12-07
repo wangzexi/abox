@@ -1,4 +1,4 @@
-FROM hub.zexi.me/oven/bun:latest
+FROM dcr.zexi.me/oven/bun:alpine
 
 WORKDIR /app
 
