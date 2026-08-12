@@ -1,15 +1,6 @@
 <div id="text" contenteditable="true"></div>
 
 <script>
-  async function getHashId(arrayBuffer) {
-    const digest = await crypto.subtle.digest("SHA-256", arrayBuffer);
-    const hashArray = Array.from(new Uint8Array(digest));
-    const hashHex = hashArray
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    return hashHex.slice(0, 10);
-  }
-
   const textEl = document.querySelector("#text");
 
   textEl.addEventListener("keydown", async function (event) {
@@ -30,9 +21,6 @@
 
     if (!body) return;
 
-    // 计算内容哈希
-    const id = await getHashId(new TextEncoder().encode(body));
-
     // 判断内容类型
     let contentType = "text/plain";
 
@@ -45,7 +33,7 @@
       contentType = "application/json";
     } catch (error) {}
 
-    const res = await fetch(`/${id}`, {
+    const res = await fetch("/save", {
       method: "POST",
       headers: {
         "Content-Type": contentType,
@@ -58,7 +46,7 @@
       return;
     }
 
-    window.location = `/${id}`;
+    window.location = res.url;
   });
 
 
@@ -74,9 +62,8 @@
     if (!file) return;
 
     const body = await file.arrayBuffer();
-    const id = await getHashId(body);
 
-    const res = await fetch(`/${id}`, {
+    const res = await fetch("/save", {
       method: "POST",
       headers: {
         "Content-Type": file.type,
@@ -90,7 +77,7 @@
       return;
     }
 
-    window.location = `/${id}`;
+    window.location = res.url;
   });
 </script>
 
