@@ -1,6 +1,6 @@
 services:
-  wenbox:
-    image: cr.zexi.love/app/wenbox:main
+  abox:
+    image: cr.zexi.love/app/abox:main
     restart: unless-stopped
     ports:
       - 9430:3000
