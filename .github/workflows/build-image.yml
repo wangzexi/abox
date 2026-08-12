@@ -3,12 +3,8 @@ name: build-image
 on:
   push:
     branches: [main]
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'Dockerfile'
-      - '.github/workflows/build-image.yml'
+    paths-ignore:
+      - 'README.md'
   workflow_dispatch:
 
 jobs:
