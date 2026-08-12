@@ -1,8 +1,0 @@
-services:
-  abox:
-    image: cr.zexi.love/app/abox:main
-    restart: unless-stopped
-    ports:
-      - 9430:3000
-    volumes:
-      - ./static/pages:/app/static/pages

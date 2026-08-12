@@ -1,3 +1,0 @@
-${CADDY_SITE} {
-  reverse_proxy ${DEPLOY_HOST}:9430
-}
