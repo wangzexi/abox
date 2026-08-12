@@ -30,8 +30,6 @@ cargo run --release   # 监听 3000 端口
 
 ## 部署
 
-镜像由 GitHub Actions 自动构建并推送到 [ghcr.io](https://github.com/wangzexi/abox/pkgs/container/abox)：
-
 ```bash
 docker run -d --name abox \
   -p 9430:3000 \
