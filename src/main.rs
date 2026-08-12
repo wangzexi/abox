@@ -49,7 +49,7 @@ async fn post_save(headers: HeaderMap, body: Bytes) -> Response {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| ext_for(&content_type));
 
-    let hash = sha256_hex(&body);
+    let hash = sha256_base36(&body);
 
     // 从 4 位开始找最短不冲突的 id
     let mut n = MIN_ID_LEN;
@@ -65,7 +65,7 @@ async fn post_save(headers: HeaderMap, body: Bytes) -> Response {
         let mut same = false;
         for p in &matches {
             if let Ok(c) = fs::read(p).await {
-                if sha256_hex(&c) == hash {
+                if sha256_base36(&c) == hash {
                     same = true;
                     break;
                 }
@@ -170,14 +170,10 @@ async fn find_files(id: &str) -> Vec<PathBuf> {
     out
 }
 
-fn sha256_hex(data: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{:02x}", b))
-        .collect()
+fn sha256_base36(data: &[u8]) -> String {
+    use num_bigint::BigUint;
+    let digest = Sha256::digest(data);
+    BigUint::from_bytes_be(&digest).to_str_radix(36)
 }
 
 fn is_inline(ct: &str) -> bool {
