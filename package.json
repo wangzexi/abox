@@ -9,7 +9,7 @@
     "typescript": "^5.0.0"
   },
   "scripts": {
-    "watch": "bun --watch src/index.ts",
+    "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts"
   },
   "type": "module",
