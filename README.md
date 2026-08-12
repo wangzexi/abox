@@ -8,7 +8,7 @@
 
 - 📝 按内容哈希（SHA-256 前 10 位）生成链接，支持富文本 / 纯文本 / JSON
 - 📎 支持拖放任意文件上传分享
-- 💾 无数据库，内容直接落盘到 `static/pages/`
+- 💾 无数据库，内容直接落盘到 `data/`
 - 🚀 基于 [Bun](https://bun.sh)，单文件服务
 
 ## 使用
@@ -42,10 +42,10 @@ services:
     ports:
       - 9430:3000
     volumes:
-      - ./static/pages:/app/static/pages
+      - ./data:/app/data
 ```
 
-`static/pages/` 为数据目录，请持久化挂载。
+`data/` 为数据目录（用户上传内容），请持久化挂载。
 
 ## 技术说明
 
