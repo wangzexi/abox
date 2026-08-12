@@ -9,7 +9,7 @@
 - 📝 按内容哈希（SHA-256 前 10 位）生成链接，支持富文本 / 纯文本 / JSON
 - 📎 支持拖放任意文件上传分享
 - 💾 无数据库，内容直接落盘到 `data/`
-- 🚀 基于 [Bun](https://bun.sh)，单文件服务
+- 🦀 基于 [Rust](https://www.rust-lang.org/)（axum），静态编译单二进制，镜像 ~5MB
 
 ## 使用
 
@@ -26,18 +26,17 @@
 ## 本地运行
 
 ```bash
-bun install
-bun start        # 监听 3000 端口
+cargo run --release   # 监听 3000 端口
 ```
 
 ## 部署
 
-使用 Docker Compose（需将镜像推送至自己的 registry）：
+镜像由 GitHub Actions 自动构建并推送到 [ghcr.io](https://github.com/wangzexi/abox/pkgs/container/abox)：
 
 ```yaml
 services:
   abox:
-    image: cr.zexi.love/app/abox:main
+    image: ghcr.io/wangzexi/abox:latest
     restart: unless-stopped
     ports:
       - 9430:3000
@@ -52,3 +51,4 @@ services:
 - 内容 ID 为内容本身的 SHA-256 哈希前 10 位，天然去重
 - 重新上传相同内容会覆盖旧文件（幂等）
 - 不支持的内容类型会自动以附件形式下载（`Content-Disposition: attachment`）
+- 前端（`src/index.html`）编译时内嵌进二进制，单文件部署
