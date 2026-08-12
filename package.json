@@ -1,5 +1,5 @@
 {
-  "name": "wenbox",
+  "name": "abox",
   "module": "src/index.ts",
   "devDependencies": {
     "@types/bun": "latest",

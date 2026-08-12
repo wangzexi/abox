@@ -1,8 +1,0 @@
-include:
-  - project: 'library/ci'
-    file: '.gitlab-ci.yml'
-
-variables:
-  DEPLOY_HOST: bj.i.zexi.me
-  CADDY_HOST: bj.i.zexi.me
-  CADDY_SITE: wenbox.zexi.love
