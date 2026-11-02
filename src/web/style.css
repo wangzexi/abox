@@ -135,20 +135,8 @@ progress::-moz-progress-bar {
   font-size: 12px;
   line-height: 1.4;
 }
-.capsule #meta {
-  color: #999;
-  font-family: monospace;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
 .capsule button {
   padding: 0;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.capsule a {
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -209,11 +197,6 @@ progress::-moz-progress-bar {
   color: #999;
   line-height: 1.8;
 }
-.download-placeholder span {
-  display: block;
-  font-size: 32px;
-  margin-bottom: 16px;
-}
 @media (max-width: 540px) {
   .capsule {
     bottom: 10px;
@@ -222,9 +205,6 @@ progress::-moz-progress-bar {
     gap: 10px;
     padding: 10px 13px;
     font-size: 11px;
-  }
-  .capsule #meta {
-    max-width: 130px;
   }
 }
 

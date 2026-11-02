@@ -2,14 +2,11 @@
 export function showPreview(data) {
   data.id = data.id || new URL(data.url).pathname.slice(1);
   const raw = `/${encodeURIComponent(data.id)}`;
-  document.title = `Abox · ${data.id}`;
+  document.title = "abox";
   document.body.className = "preview-page";
   document.body.innerHTML = `
-    <aside class="capsule" aria-label="文件信息与分享">
-      <span id="meta"></span>
-      <span class="capsule-divider" aria-hidden="true"></span>
+    <aside class="capsule" aria-label="分享与管理">
       <button id="copy" type="button">复制链接</button>
-      <a id="open" target="_blank" rel="noopener noreferrer">原始链接 ↗</a>
       ${data.key ? '<span class="capsule-divider" aria-hidden="true"></span><button id="delete" class="delete-button" type="button">删除</button>' : ""}
       <input id="share-link" readonly aria-label="分享链接" class="share-link">
       <span id="copy-status" role="status" aria-live="polite"></span>
@@ -17,17 +14,7 @@ export function showPreview(data) {
     <main id="stage" class="preview-stage" aria-label="文件预览"></main>`;
   const stage = document.querySelector("#stage");
   const share = document.querySelector("#share-link");
-  const size =
-    data.size < 1024
-      ? `${data.size} B`
-      : data.size < 1024 * 1024
-        ? `${(data.size / 1024).toFixed(1)} KiB`
-        : `${(data.size / 1024 / 1024).toFixed(1)} MiB`;
-  const meta = document.querySelector("#meta");
-  meta.textContent = `${data.filename || data.id} · ${size}`;
-  meta.title = `${data.content_type} · ${data.size} bytes`;
   share.value = data.url;
-  document.querySelector("#open").href = raw;
   const type = data.content_type;
   if (type.startsWith("image/") && !type.startsWith("image/svg")) {
     const img = document.createElement("img");
@@ -60,7 +47,7 @@ export function showPreview(data) {
     const box = document.createElement("div");
     box.className = "download-placeholder";
     box.innerHTML =
-      "<strong>文件已准备好</strong><p>此类型暂不支持在线预览。<br>点击“原始链接”获取文件，或直接分享链接。</p>";
+      "<strong>文件已准备好</strong><p>此类型暂不支持在线预览。<br>复制链接即可打开或分享文件。</p>";
     stage.append(box);
   }
   document.querySelector("#copy").onclick = async () => {
