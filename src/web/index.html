@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>abox</title>
+    <script type="text/plain" id="api-instructions">
+      __API_INSTRUCTIONS__
+    </script>
+    <link rel="stylesheet" href="/assets/style.css" />
+  </head>
+  <body>
+    <!-- 用 curl 请求本页面即可获得 API 操作说明：curl https://abox.example.com/ -->
+    <main id="workspace">
+      <div
+        id="text"
+        class="editor"
+        contenteditable="true"
+        role="textbox"
+        aria-multiline="true"
+        aria-label="输入要分享的内容"
+        data-placeholder="请输入内容，按 Ctrl/Cmd + S 保存，按 Ctrl/Cmd + Alt + S 保存纯文本，或者拖放文件到此处"
+      ></div>
+      <div class="capsule" aria-label="保存操作">
+        <button id="save" type="button">保存</button
+        ><span class="capsule-divider" aria-hidden="true"></span
+        ><button id="save-plain" type="button">保存纯文本</button>
+      </div>
+      <div id="upload-progress" class="upload-progress" hidden>
+        <div class="progress-head">
+          <span id="upload-label">正在上传</span><span id="percent">0%</span>
+        </div>
+        <progress
+          id="progress"
+          max="100"
+          value="0"
+          aria-label="上传进度"
+        ></progress>
+        <div class="progress-head">
+          <span id="upload-detail"></span
+          ><button id="cancel" type="button">取消</button>
+        </div>
+      </div>
+      <div id="error" class="error" role="alert"></div>
+    </main>
+
+    <script type="module">
+      import { showPreview } from "/assets/preview.js";
+      const editor = document.querySelector("#text"),
+        saveButton = document.querySelector("#save"),
+        plainButton = document.querySelector("#save-plain"),
+        progressWrap = document.querySelector("#upload-progress"),
+        progress = document.querySelector("#progress"),
+        percent = document.querySelector("#percent"),
+        label = document.querySelector("#upload-label"),
+        detail = document.querySelector("#upload-detail"),
+        errorBox = document.querySelector("#error"),
+        cancel = document.querySelector("#cancel");
+      let active = null;
+      const maxSize = 256 * 1024 * 1024;
+      function sizeText(n) {
+        return n < 1024 ? `${n} B` : `${(n / 1024 / 1024).toFixed(2)} MiB`;
+      }
+      function upload(body, type, name) {
+        if (active) return;
+        errorBox.textContent = "";
+        if (body.size > maxSize) {
+          errorBox.textContent = "文件超过 256 MiB，请拖入更小的文件。";
+          return;
+        }
+        const xhr = new XMLHttpRequest();
+        active = xhr;
+        saveButton.disabled = plainButton.disabled = true;
+        editor.contentEditable = "false";
+        progressWrap.hidden = false;
+        progress.value = 0;
+        percent.textContent = "0%";
+        label.textContent = `正在上传 · ${name}`;
+        detail.textContent = `0 B / ${sizeText(body.size)}`;
+        cancel.hidden = false;
+        xhr.open("POST", "/");
+        xhr.setRequestHeader(
+          "Content-Type",
+          type || "application/octet-stream",
+        );
+        xhr.setRequestHeader("Accept", "application/json");
+        xhr.setRequestHeader(
+          "Content-Disposition",
+          "attachment; filename*=UTF-8''" +
+            encodeURIComponent(name).replace(
+              /['()*]/g,
+              (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase(),
+            ),
+        );
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const value = Math.floor((e.loaded / e.total) * 100);
+            progress.value = value;
+            percent.textContent = `${value}%`;
+            detail.textContent = `${sizeText(e.loaded)} / ${sizeText(e.total)}`;
+            if (value === 100) {
+              label.textContent = "上传完成，正在保存…";
+              cancel.hidden = true;
+            }
+          }
+        };
+        function reset() {
+          active = null;
+          saveButton.disabled = plainButton.disabled = false;
+          editor.contentEditable = "true";
+        }
+        xhr.onload = () => {
+          reset();
+          let result;
+          try {
+            result = JSON.parse(xhr.responseText);
+          } catch {}
+          if (xhr.status === 201 && result?.url) {
+            progress.value = 100;
+            percent.textContent = "100%";
+            label.textContent = "已保存，正在打开预览…";
+            showPreview({
+              ...result,
+              filename: name,
+              size: body.size,
+              content_type: type,
+            });
+            return;
+          }
+          progressWrap.hidden = true;
+          errorBox.textContent =
+            result?.error || `上传失败（HTTP ${xhr.status}），请重试。`;
+        };
+        xhr.onerror = () => {
+          reset();
+          progressWrap.hidden = true;
+          errorBox.textContent = "网络连接中断，未确认上传成功，请重试。";
+        };
+        xhr.onabort = () => {
+          reset();
+          progressWrap.hidden = true;
+          errorBox.textContent = "已取消上传。";
+        };
+        xhr.send(body);
+      }
+      function saveText(plain = false) {
+        const text = editor.innerText;
+        let value = plain
+          ? text
+          : editor.innerHTML
+              .replace(/&lt;/g, "<")
+              .replace(/&gt;/g, ">")
+              .replace(/&nbsp;/g, " ");
+        if (!value.trim()) {
+          errorBox.textContent = "请先输入内容，或拖入一个文件。";
+          editor.focus();
+          return;
+        }
+        let type = "text/plain",
+          ext = "txt";
+        if (!plain) {
+          if (/<(!doctype|html|\w+)[\s>]/i.test(text)) {
+            value = text;
+            type = "text/html";
+            ext = "html";
+          } else if (/<(\w+)[^>]*>.*<\/\1>/s.test(value)) {
+            type = "text/html";
+            ext = "html";
+          }
+          try {
+            JSON.parse(value);
+            type = "application/json";
+            ext = "json";
+          } catch {}
+        }
+        upload(new Blob([value], { type }), type, `note.${ext}`);
+      }
+      function uploadFile(file) {
+        if (!file) return;
+        upload(file, file.type || "application/octet-stream", file.name);
+      }
+      saveButton.onclick = () => saveText();
+      plainButton.onclick = () => saveText(true);
+      cancel.onclick = () => active?.abort();
+      editor.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+          e.preventDefault();
+          if (!active) saveText(e.altKey);
+        }
+      });
+      const workspace = document.querySelector("#workspace");
+      let dragDepth = 0;
+      workspace.addEventListener("dragenter", (e) => {
+        e.preventDefault();
+        dragDepth++;
+        workspace.classList.add("dragging");
+      });
+      workspace.addEventListener("dragover", (e) => e.preventDefault());
+      workspace.addEventListener("dragleave", () => {
+        if (--dragDepth <= 0) {
+          workspace.classList.remove("dragging");
+          dragDepth = 0;
+        }
+      });
+      workspace.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dragDepth = 0;
+        workspace.classList.remove("dragging");
+        uploadFile(e.dataTransfer.files[0]);
+      });
+      window.addEventListener("beforeunload", (e) => {
+        if (active) {
+          e.preventDefault();
+          e.returnValue = "";
+        }
+      });
+    </script>
+  </body>
+</html>

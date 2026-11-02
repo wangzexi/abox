@@ -1,0 +1,23 @@
+# Abox — share text, images, HTML and files
+
+curl https://abox.example.com/ \
+  -H 'Content-Type: image/png' \
+  -H 'Content-Disposition: attachment; filename="photo.png"' \
+  --data-binary @photo.png
+
+Response:
+{"url":"https://abox.example.com/abc123","key":"YOUR_KEY"}
+
+Read: open url.
+
+Update:
+curl -X PUT https://abox.example.com/abc123 \
+  -H 'Authorization: Bearer YOUR_KEY' \
+  -H 'Content-Type: text/plain; charset=utf-8' \
+  --data-binary 'updated text'
+
+Delete:
+curl -X DELETE https://abox.example.com/abc123 \
+  -H 'Authorization: Bearer YOUR_KEY'
+
+Files up to 256 MiB are protected for 30 days, then managed by LRU; each access updates recency.
