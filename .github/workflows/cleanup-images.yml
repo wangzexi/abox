@@ -1,0 +1,33 @@
+name: Clean images
+run-name: Clean Abox images (${{ inputs.apply && 'apply' || 'preview' }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployed_digest:
+        description: Currently deployed image digest to retain
+        required: true
+        type: string
+      apply:
+        description: Delete historical image versions
+        type: boolean
+        default: false
+
+concurrency:
+  group: abox-registry
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 .github/scripts/cleanup_images.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOYED_DIGEST: ${{ inputs.deployed_digest }}
+          APPLY: ${{ inputs.apply }}

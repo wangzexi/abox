@@ -3,9 +3,18 @@ name: build-image
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'README.md'
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - '.github/workflows/build-image.yml'
   workflow_dispatch:
+
+concurrency:
+  group: abox-registry
+  cancel-in-progress: false
 
 jobs:
   test:
