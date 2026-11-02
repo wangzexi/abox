@@ -336,9 +336,20 @@ async fn content(
     } else {
         "inline"
     };
+    let content_type = if (record.content_type.starts_with("text/")
+        || record.content_type.starts_with("application/json"))
+        && !record
+            .content_type
+            .to_ascii_lowercase()
+            .contains("charset=")
+    {
+        format!("{}; charset=utf-8", record.content_type)
+    } else {
+        record.content_type.clone()
+    };
     Response::builder()
         .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, &record.content_type)
+        .header(header::CONTENT_TYPE, content_type)
         .header(header::CONTENT_LENGTH, record.size)
         .header(header::CACHE_CONTROL, "no-store")
         .header("x-content-type-options", "nosniff")

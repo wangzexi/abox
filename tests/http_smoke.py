@@ -42,7 +42,9 @@ def check():
                     if time.monotonic() > deadline:
                         raise
                     time.sleep(.02)
-            assert request('GET', '/save')[2] == b'legacy save link'
+            legacy_read = request('GET', '/save')
+            assert legacy_read[2] == b'legacy save link'
+            assert 'charset=utf-8' in legacy_read[1]['content-type']
             legacy_meta = json.loads(Path(directory, '.metadata/save.json').read_text())
             assert legacy_meta['protected_until'] == legacy_meta['created_at'] + 30*86400000
             homepage = request('GET', '/')[2]
