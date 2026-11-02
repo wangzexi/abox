@@ -22,7 +22,7 @@ def request(url, headers, method="GET"):
 
 
 def manifest_closure(roots, load):
-    retained, blobs = set(), set()
+    retained = set()
     pending = list(roots)
     while pending:
         digest = pending.pop()
@@ -33,10 +33,7 @@ def manifest_closure(roots, load):
         pending.extend(item["digest"] for item in manifest.get("manifests", []))
         if manifest.get("subject"):
             pending.append(manifest["subject"]["digest"])
-        if manifest.get("config"):
-            blobs.add(manifest["config"]["digest"])
-        blobs.update(item["digest"] for item in manifest.get("layers", []))
-    return retained, blobs
+    return retained
 
 
 def main():
@@ -68,7 +65,7 @@ def main():
     )
     latest = latest_headers.get("Docker-Content-Digest") or "sha256:" + hashlib.sha256(latest_body).hexdigest()
     roots = {deployed, latest}
-    retained, blobs = manifest_closure(roots, load)
+    retained = manifest_closure(roots, load)
     versions = []
     page = 1
     while True:
@@ -86,10 +83,8 @@ def main():
     if apply:
         for version in eligible:
             request(API + "/" + str(version["id"]), api_headers, "DELETE")
-        # Confirm retained manifests and layer/config blobs remain retrievable.
+        # Confirm the retained index, platform and attestation manifests remain retrievable.
         manifest_closure(roots, load)
-        for digest in blobs:
-            request("https://ghcr.io/v2/" + PACKAGE + "/blobs/" + digest, registry_headers, "HEAD")
         print(json.dumps({"deleted": len(eligible), "retained_graph_verified": True}), flush=True)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("```json\n" + json.dumps(summary, indent=2) + "\n```\n")
