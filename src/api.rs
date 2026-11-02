@@ -4,10 +4,10 @@ use crate::{
 };
 use axum::{
     body::Body,
-    extract::{Path, Query, State},
+    extract::{OriginalUri, Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{Html, IntoResponse, Response},
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
 use futures_util::StreamExt;
@@ -29,7 +29,7 @@ struct App {
 pub fn router(store: Store, base: String) -> Router {
     Router::new()
         .route("/", get(index).post(upload))
-        .route("/save", post(legacy_upload))
+        .route("/save", get(content).post(legacy_upload))
         .route("/assets/style.css", get(styles))
         .route("/assets/preview.js", get(preview_script))
         .route("/{id}", get(content).put(update).delete(remove))
@@ -309,13 +309,14 @@ struct Download {
 }
 async fn content(
     State(app): State<App>,
-    Path(id): Path<String>,
+    OriginalUri(uri): OriginalUri,
     Query(query): Query<Download>,
 ) -> Response {
-    if !storage::valid_id(&id) {
+    let id = uri.path().trim_start_matches('/');
+    if !storage::valid_id(id) {
         return StatusCode::NOT_FOUND.into_response();
     }
-    let (record, file) = match app.store.read(&id).await {
+    let (record, file) = match app.store.read(id).await {
         Ok(Some(r)) => r,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(e) => return internal(e),

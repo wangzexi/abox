@@ -21,6 +21,7 @@ def check():
             port = sock.getsockname()[1]
         base = f'http://127.0.0.1:{port}'
         env = dict(os.environ, ABOX_LISTEN=f'127.0.0.1:{port}', ABOX_PUBLIC_URL=base, ABOX_DATA_DIR=directory)
+        Path(directory, 'save.txt').write_bytes(b'legacy save link')
         proc = subprocess.Popen([str(ROOT/'target/debug/abox')], env=env, stdout=subprocess.DEVNULL)
         def request(method, path, body=None, headers=None):
             conn = http.client.HTTPConnection('127.0.0.1', port, timeout=30)
@@ -41,6 +42,9 @@ def check():
                     if time.monotonic() > deadline:
                         raise
                     time.sleep(.02)
+            assert request('GET', '/save')[2] == b'legacy save link'
+            legacy_meta = json.loads(Path(directory, '.metadata/save.json').read_text())
+            assert legacy_meta['protected_until'] == legacy_meta['created_at'] + 30*86400000
             homepage = request('GET', '/')[2]
             assert b'--data-binary' in homepage and b'Content-Disposition' in homepage
             assert b'/llms.txt' not in homepage
