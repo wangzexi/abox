@@ -4,7 +4,7 @@ RUN apk add --no-cache musl-dev
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-RUN cargo build --release
+RUN cargo build --release --locked
 
 # 运行阶段: scratch, 只包含静态二进制
 FROM scratch
