@@ -2,8 +2,6 @@
 
 一个轻量便签、临时剪贴板和文件床。打开页面输入或粘贴内容，也可以直接拖入文件。
 
-[使用 Abox](https://abox.example.com/)
-
 ## 浏览器使用
 
 - **保存**：自动识别 HTML、JSON 和文本。
@@ -18,7 +16,7 @@
 
 ## API
 
-获取操作示例：
+以下示例使用 `https://abox.example.com` 作为你的部署地址。获取操作示例：
 
 ```bash
 curl https://abox.example.com/
@@ -81,7 +79,7 @@ docker run -d --name abox \
 | 环境变量 | 默认值 |
 |---|---|
 | `ABOX_LISTEN` | `0.0.0.0:3000` |
-| `ABOX_PUBLIC_URL` | `https://abox.example.com` |
+| `ABOX_PUBLIC_URL` | 部署时设置为自己的公开地址 |
 | `ABOX_DATA_DIR` | `data` |
 | `ABOX_SMALL_CAPACITY_MIB` | `256` |
 | `ABOX_LARGE_CAPACITY_MIB` | `384` |
