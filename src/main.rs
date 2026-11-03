@@ -13,7 +13,7 @@ async fn main() -> std::io::Result<()> {
     )
     .await?;
     let base = std::env::var("ABOX_PUBLIC_URL")
-        .unwrap_or_else(|_| "https://abox.example.com".into())
+        .unwrap_or_else(|_| "http://localhost:3000".into())
         .trim_end_matches('/')
         .to_owned();
     let app = api::router(store, base);

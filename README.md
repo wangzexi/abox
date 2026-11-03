@@ -79,7 +79,7 @@ docker run -d --name abox \
 | 环境变量 | 默认值 |
 |---|---|
 | `ABOX_LISTEN` | `0.0.0.0:3000` |
-| `ABOX_PUBLIC_URL` | 部署时设置为自己的公开地址 |
+| `ABOX_PUBLIC_URL` | `http://localhost:3000`（部署时设置为自己的公开地址） |
 | `ABOX_DATA_DIR` | `data` |
 | `ABOX_SMALL_CAPACITY_MIB` | `256` |
 | `ABOX_LARGE_CAPACITY_MIB` | `384` |
