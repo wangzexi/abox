@@ -11,7 +11,8 @@ use subtle::ConstantTimeEq;
 use tokio::{fs, sync::Mutex};
 
 pub const MAX_UPLOAD: u64 = 256 * 1024 * 1024;
-pub const LARGE_THRESHOLD: u64 = 100 * 1024 * 1024;
+pub const DEFAULT_LIFETIME_MS: u64 = 7 * 86_400_000;
+pub const MAX_LIFETIME_SECONDS: u64 = 365 * 86_400;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Record {
@@ -24,9 +25,10 @@ pub struct Record {
     pub content_type: String,
     pub size: u64,
     pub created_at: u64,
-    pub last_accessed_at: u64,
     #[serde(default)]
-    pub protected_until: u64,
+    pub expires_at: u64,
+    #[serde(default, rename = "protected_until", skip_serializing)]
+    legacy_protected_until: u64,
 }
 impl Record {
     pub fn download_name(&self) -> &str {
@@ -55,8 +57,7 @@ pub fn hash_key(key: &str) -> String {
 pub struct Store {
     root: PathBuf,
     records: Mutex<HashMap<String, Record>>,
-    small_capacity: u64,
-    large_capacity: u64,
+    capacity: u64,
 }
 
 // Removing an unfinished upload also works when the request future is cancelled.
@@ -83,7 +84,7 @@ pub fn valid_id(id: &str) -> bool {
 }
 
 impl Store {
-    pub async fn open(root: PathBuf, small_capacity: u64, large_capacity: u64) -> io::Result<Self> {
+    pub async fn open(root: PathBuf, capacity: u64) -> io::Result<Self> {
         fs::create_dir_all(root.join(".metadata")).await?;
         fs::create_dir_all(root.join(".objects")).await?;
         let mut records = HashMap::new();
@@ -93,7 +94,7 @@ impl Store {
             if entry.path().extension().and_then(|s| s.to_str()) != Some("json") {
                 continue;
             }
-            let r: Record = serde_json::from_slice(&fs::read(entry.path()).await?)?;
+            let mut r: Record = serde_json::from_slice(&fs::read(entry.path()).await?)?;
             if !r.filename.starts_with(".objects/") {
                 continue;
             }
@@ -108,6 +109,10 @@ impl Store {
             }
             if fs::metadata(root.join(&r.filename)).await?.len() != r.size {
                 return Err(io::Error::other("object size mismatch"));
+            }
+            if r.expires_at == 0 {
+                r.expires_at = (now() + DEFAULT_LIFETIME_MS).max(r.legacy_protected_until);
+                migrated.push(r.clone());
             }
             records.insert(r.id.clone(), r);
         }
@@ -145,7 +150,7 @@ impl Store {
                 return Err(io::Error::other(format!("duplicate stored id: {id}")));
             }
             let meta_path = root.join(".metadata").join(format!("{id}.json"));
-            let record = match fs::read(&meta_path).await {
+            let mut record = match fs::read(&meta_path).await {
                 Ok(bytes) => {
                     let r: Record = serde_json::from_slice(&bytes)?;
                     if r.id != id || r.filename != filename || r.size != stat.len() {
@@ -154,7 +159,7 @@ impl Store {
                     r
                 }
                 Err(e) if e.kind() == io::ErrorKind::NotFound => {
-                    // Register existing links once with a fresh 30-day protection period.
+                    // Register existing links once with a fresh expiry.
                     let timestamp = now();
                     let record = Record {
                         id: id.into(),
@@ -166,28 +171,32 @@ impl Store {
                             .to_string(),
                         size: stat.len(),
                         created_at: timestamp,
-                        last_accessed_at: timestamp,
-                        protected_until: timestamp + 30 * 86_400_000,
+                        expires_at: timestamp + DEFAULT_LIFETIME_MS,
+                        legacy_protected_until: 0,
                     };
                     migrated.push(record.clone());
                     record
                 }
                 Err(e) => return Err(e),
             };
+            if record.expires_at == 0 {
+                record.expires_at =
+                    (now() + DEFAULT_LIFETIME_MS).max(record.legacy_protected_until);
+                migrated.push(record.clone());
+            }
             records.insert(id.to_owned(), record);
         }
         let store = Self {
             root,
             records: Mutex::new(records),
-            small_capacity,
-            large_capacity,
+            capacity,
         };
         for record in &migrated {
             store.write_metadata(record).await?;
         }
         if !migrated.is_empty() {
             println!(
-                "Registered {} existing files with 30-day protection",
+                "Registered {} existing files with an expiry",
                 migrated.len()
             );
         }
@@ -233,6 +242,7 @@ impl Store {
             filename: original_name,
         } = upload;
         let mut records = self.records.lock().await;
+        self.expire_locked(&mut records).await?;
         let previous = if let Some(target) = identity.target.as_deref() {
             let record = records.get(target).ok_or_else(|| {
                 io::Error::new(io::ErrorKind::NotFound, "file was removed during update")
@@ -252,52 +262,13 @@ impl Store {
             None
         };
         let previous_id = previous.as_ref().map(|r| r.id.as_str());
-        let is_large = size > LARGE_THRESHOLD;
-        let capacity = if is_large {
-            self.large_capacity
-        } else {
-            self.small_capacity
-        };
-        if size > capacity {
-            return Err(io::Error::other("file exceeds bucket capacity"));
-        }
-        let mut used: u64 = records
+        let used: u64 = records
             .values()
-            .filter(|r| {
-                (r.size > LARGE_THRESHOLD) == is_large && Some(r.id.as_str()) != previous_id
-            })
+            .filter(|r| Some(r.id.as_str()) != previous_id)
             .map(|r| r.size)
             .sum();
-        let mut victims: Vec<_> = records
-            .values()
-            .filter(|r| {
-                (r.size > LARGE_THRESHOLD) == is_large
-                    && r.protected_until <= now()
-                    && Some(r.id.as_str()) != previous_id
-            })
-            .cloned()
-            .collect();
-        if used + size > capacity + victims.iter().map(|r| r.size).sum::<u64>() {
-            return Err(io::Error::other("bucket is full of protected files"));
-        }
-        victims.sort_by(|a, b| (a.last_accessed_at, &a.id).cmp(&(b.last_accessed_at, &b.id)));
-        for victim in victims {
-            if used + size <= capacity {
-                break;
-            }
-            // Removing the index first makes an interrupted eviction an unreachable object.
-            let metadata = self
-                .root
-                .join(".metadata")
-                .join(format!("{}.json", victim.id));
-            match fs::remove_file(metadata).await {
-                Ok(()) => (),
-                Err(e) if e.kind() == io::ErrorKind::NotFound => (),
-                Err(e) => return Err(e),
-            }
-            records.remove(&victim.id);
-            fs::remove_file(self.root.join(&victim.filename)).await?;
-            used -= victim.size;
+        if size > self.capacity || used.saturating_add(size) > self.capacity {
+            return Err(io::Error::other("storage capacity exceeded"));
         }
         let id = if let Some(old) = &previous {
             old.id.clone()
@@ -328,8 +299,10 @@ impl Store {
             size,
             content_type,
             created_at: previous.as_ref().map(|r| r.created_at).unwrap_or(timestamp),
-            last_accessed_at: timestamp,
-            protected_until: timestamp + 30 * 86_400_000,
+            expires_at: previous
+                .as_ref()
+                .map_or(timestamp + DEFAULT_LIFETIME_MS, |r| r.expires_at),
+            legacy_protected_until: 0,
         };
         // Publish a new object version, then atomically switch its metadata pointer.
         fs::rename(&pending.path, self.root.join(&record.filename)).await?;
@@ -347,16 +320,21 @@ impl Store {
     }
 
     pub async fn authorize(&self, id: &str, key: &str) -> Option<bool> {
-        self.records.lock().await.get(id).map(|r| {
-            r.key_hash.as_ref().is_some_and(|expected| {
-                bool::from(expected.as_bytes().ct_eq(hash_key(key).as_bytes()))
+        self.records
+            .lock()
+            .await
+            .get(id)
+            .filter(|r| r.expires_at > now())
+            .map(|r| {
+                r.key_hash.as_ref().is_some_and(|expected| {
+                    bool::from(expected.as_bytes().ct_eq(hash_key(key).as_bytes()))
+                })
             })
-        })
     }
 
     pub async fn delete(&self, id: &str, key: &str) -> io::Result<bool> {
         let mut records = self.records.lock().await;
-        let Some(record) = records.get(id).cloned() else {
+        let Some(record) = records.get(id).filter(|r| r.expires_at > now()).cloned() else {
             return Ok(false);
         };
         if !record
@@ -376,17 +354,63 @@ impl Store {
         Ok(true)
     }
 
-    // Open while holding the same lock as eviction: the response owns the open file afterward.
-    pub async fn read(&self, id: &str) -> io::Result<Option<(Record, fs::File)>> {
+    async fn expire_locked(&self, records: &mut HashMap<String, Record>) -> io::Result<()> {
+        let expired: Vec<_> = records
+            .values()
+            .filter(|r| r.expires_at <= now())
+            .cloned()
+            .collect();
+        for record in expired {
+            fs::remove_file(
+                self.root
+                    .join(".metadata")
+                    .join(format!("{}.json", record.id)),
+            )
+            .await?;
+            records.remove(&record.id);
+            match fs::remove_file(self.root.join(&record.filename)).await {
+                Ok(()) => (),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => (),
+                Err(e) => eprintln!("expired object cleanup: {e}"),
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn expire(&self) -> io::Result<()> {
         let mut records = self.records.lock().await;
-        let Some(existing) = records.get(id) else {
-            return Ok(None);
-        };
-        let mut record = existing.clone();
-        let file = fs::File::open(self.root.join(&record.filename)).await?;
-        record.last_accessed_at = now().max(record.last_accessed_at + 1);
+        self.expire_locked(&mut records).await
+    }
+
+    pub async fn renew(&self, id: &str, key: &str, seconds: u64) -> io::Result<Record> {
+        let mut records = self.records.lock().await;
+        let mut record = records
+            .get(id)
+            .filter(|r| r.expires_at > now())
+            .cloned()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "file expired"))?;
+        if !record
+            .key_hash
+            .as_ref()
+            .is_some_and(|h| bool::from(h.as_bytes().ct_eq(hash_key(key).as_bytes())))
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "invalid key",
+            ));
+        }
+        record.expires_at = now() + seconds * 1000;
         self.write_metadata(&record).await?;
         records.insert(id.to_owned(), record.clone());
+        Ok(record)
+    }
+
+    pub async fn read(&self, id: &str) -> io::Result<Option<(Record, fs::File)>> {
+        let records = self.records.lock().await;
+        let Some(record) = records.get(id).filter(|r| r.expires_at > now()).cloned() else {
+            return Ok(None);
+        };
+        let file = fs::File::open(self.root.join(&record.filename)).await?;
         Ok(Some((record, file)))
     }
 }

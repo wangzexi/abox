@@ -46,7 +46,7 @@ def check():
             assert legacy_read[2] == b'legacy save link'
             assert 'charset=utf-8' in legacy_read[1]['content-type']
             legacy_meta = json.loads(Path(directory, '.metadata/save.json').read_text())
-            assert legacy_meta['protected_until'] == legacy_meta['created_at'] + 30*86400000
+            assert legacy_meta['expires_at'] == legacy_meta['created_at'] + 7*86400000
             homepage = request('GET', '/')[2]
             assert b'--data-binary' in homepage and b'Content-Disposition' in homepage
             assert b'/llms.txt' not in homepage
@@ -60,17 +60,28 @@ def check():
             status, headers, body = request('POST', '/', b'hello', {'Content-Type':'text/plain'})
             assert status == 201
             data = json.loads(body)
-            assert set(data) == {'url','key'}
+            assert set(data) == {'url','key','expires_at'}
             assert len(data['key']) >= 32 and data['url'].startswith(base+'/')
             path = data['url'].removeprefix(base)
             assert len(path[1:]) == 12
             assert request('GET', path)[2] == b'hello'
+            _, _, short_body = request('POST', '/', b'short lived', {'Content-Type':'text/plain'})
+            short = json.loads(short_body)
+            short_path = short['url'].removeprefix(base)
+            short_headers = {'Authorization':'Bearer '+short['key'], 'Content-Type':'application/json'}
+            assert request('POST', short_path+'/renew', b'{\"expires_in_seconds\":1}', short_headers)[0] == 200
+            time.sleep(1.2)
+            assert request('GET', short_path)[0] == 404
             assert request('PATCH', path, b'changed')[0] == 405
             for method in ('PUT','DELETE'):
                 assert request(method, path, b'changed')[0] == 401
                 assert request(method, path, b'changed', {'Authorization':'Bearer incorrect'})[0] == 403
             assert request('GET', path)[2] == b'hello'
-            assert request('POST', path+'/renew')[0] == 404
+            renew_headers = {'Authorization':'Bearer '+data['key'], 'Content-Type':'application/json'}
+            assert request('POST', path+'/renew', b'{"expires_in_seconds":60}', {'Content-Type':'application/json'})[0] == 401
+            assert request('POST', path+'/renew', b'{"expires_in_seconds":31536001}', renew_headers)[0] == 400
+            renewed = request('POST', path+'/renew', b'{"expires_in_seconds":60}', renew_headers)
+            assert renewed[0] == 200 and 'expires_at' in json.loads(renewed[2])
             assert 'renew_after' not in data and 'renew_url' not in data and 'protected_until' not in data
             assert data['key'].encode() not in request('GET', path)[2]
             assert request('POST', '/', b'x', {'Content-Disposition':'attachment; filename="../file.html"'})[0] == 400
@@ -88,7 +99,7 @@ def check():
             ]:
                 status, _, saved = request('POST', '/', b'file bytes', {'Content-Type':'application/octet-stream', 'Content-Disposition':disposition})
                 result = json.loads(saved)
-                assert status == 201 and set(result) == {'url','key'}
+                assert status == 201 and set(result) == {'url','key','expires_at'}
                 downloaded = request('GET', result['url'].removeprefix(base)+'?download=1')
                 from email.message import Message
                 message = Message()
@@ -112,7 +123,7 @@ def check():
             assert res.status == 201
             large = json.loads(res.read())
             conn.close()
-            assert set(large) == {'url','key'}
+            assert set(large) == {'url','key','expires_at'}
             conn = http.client.HTTPConnection('127.0.0.1', port, timeout=30)
             conn.request('GET', large['url'].removeprefix(base))
             res = conn.getresponse()
@@ -153,7 +164,7 @@ def check():
             assert request('GET', path)[2] == b'hello'
             auth = {'Authorization':'Bearer '+data['key'], 'Content-Type':'text/plain'}
             updated = request('PUT', path, b'updated text', auth)
-            assert updated[0] == 200 and json.loads(updated[2]) == {'url':data['url']}
+            assert updated[0] == 200 and json.loads(updated[2])['url'] == data['url'] and 'expires_at' in json.loads(updated[2])
             assert request('GET', path)[2] == b'updated text'
             # Hashes persist; a restart retains the update and its original management key.
             meta_path = Path(directory)/'.metadata'/(path[1:]+'.json')

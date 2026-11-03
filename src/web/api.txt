@@ -6,7 +6,7 @@ curl https://abox.example.com/ \
   --data-binary @photo.png
 
 Response:
-{"url":"https://abox.example.com/abc123","key":"YOUR_KEY"}
+{"url":"https://abox.example.com/abc123","key":"YOUR_KEY","expires_at":"2026-11-10T12:00:00Z"}
 
 Read: open url.
 
@@ -16,8 +16,14 @@ curl -X PUT https://abox.example.com/abc123 \
   -H 'Content-Type: text/plain; charset=utf-8' \
   --data-binary 'updated text'
 
+Renew from now (seconds, maximum 365 days):
+curl -X POST https://abox.example.com/abc123/renew \
+  -H 'Authorization: Bearer YOUR_KEY' \
+  -H 'Content-Type: application/json' \
+  --data '{"expires_in_seconds":2592000}'
+
 Delete:
 curl -X DELETE https://abox.example.com/abc123 \
   -H 'Authorization: Bearer YOUR_KEY'
 
-Files up to 256 MiB are protected for 30 days, then managed by LRU; each access updates recency.
+Files up to 256 MiB expire after 7 days by default.

@@ -7,6 +7,16 @@ export function showPreview(data) {
   document.body.innerHTML = `
     <aside class="capsule" aria-label="分享与管理">
       <button id="copy" type="button">复制链接</button>
+      <span class="capsule-divider" aria-hidden="true"></span>
+      <div class="expiry-control">
+        <button id="expiry" type="button" aria-haspopup="true" aria-expanded="false"></button>
+        <div id="expiry-menu" class="expiry-menu" hidden>
+          <button type="button" data-days="1">1 天</button>
+          <button type="button" data-days="30">30 天</button>
+          <button type="button" data-days="60">60 天</button>
+          <button type="button" data-days="365">365 天</button>
+        </div>
+      </div>
       ${data.key ? '<span class="capsule-divider" aria-hidden="true"></span><button id="delete" class="delete-button" type="button">删除</button>' : ""}
       <input id="share-link" readonly aria-label="分享链接" class="share-link">
       <span id="copy-status" role="status" aria-live="polite"></span>
@@ -15,6 +25,55 @@ export function showPreview(data) {
   const stage = document.querySelector("#stage");
   const share = document.querySelector("#share-link");
   share.value = data.url;
+  const expiry = document.querySelector("#expiry");
+  const menu = document.querySelector("#expiry-menu");
+  function showExpiry() {
+    const remaining = new Date(data.expires_at).getTime() - Date.now();
+    const days = Math.ceil(remaining / 86400000);
+    expiry.textContent = remaining <= 0 ? "已过期" : `${days} 天`;
+    expiry.setAttribute("aria-label", remaining <= 0 ? "已过期" : `${days} 天后过期，修改期限`);
+    expiry.title = new Date(data.expires_at).toLocaleString();
+  }
+  showExpiry();
+  setInterval(showExpiry, 60000);
+  expiry.onclick = () => {
+    menu.hidden = !menu.hidden;
+    expiry.setAttribute("aria-expanded", String(!menu.hidden));
+  };
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".expiry-control")) {
+      menu.hidden = true;
+      expiry.setAttribute("aria-expanded", "false");
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !menu.hidden) {
+      menu.hidden = true;
+      expiry.setAttribute("aria-expanded", "false");
+      expiry.focus();
+    }
+  });
+  menu.onclick = async (event) => {
+    const days = Number(event.target.dataset.days);
+    if (!days) return;
+    expiry.disabled = true;
+    menu.hidden = true;
+    expiry.setAttribute("aria-expanded", "false");
+    try {
+      const response = await fetch(`${raw}/renew`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${data.key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ expires_in_seconds: days * 86400 }),
+      });
+      if (!response.ok) throw new Error("renewal failed");
+      data.expires_at = (await response.json()).expires_at;
+      showExpiry();
+    } catch {
+      document.querySelector("#copy-status").textContent = "修改期限失败，请重试";
+    } finally {
+      expiry.disabled = false;
+    }
+  };
   const type = data.content_type;
   if (type.startsWith("image/") && !type.startsWith("image/svg")) {
     const img = document.createElement("img");

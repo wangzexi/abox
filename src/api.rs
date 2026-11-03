@@ -27,14 +27,26 @@ struct App {
 }
 
 pub fn router(store: Store, base: String) -> Router {
+    let store = Arc::new(store);
+    let cleanup = store.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            if let Err(e) = cleanup.expire().await {
+                eprintln!("expiry cleanup: {e}");
+            }
+        }
+    });
     Router::new()
         .route("/", get(index).post(upload))
         .route("/save", get(content).post(legacy_upload))
         .route("/assets/style.css", get(styles))
         .route("/assets/preview.js", get(preview_script))
         .route("/{id}", get(content).put(update).delete(remove))
+        .route("/{id}/renew", axum::routing::post(renew))
         .with_state(App {
-            store: Arc::new(store),
+            store,
             uploads: Arc::new(Semaphore::new(1)),
             base,
         })
@@ -95,7 +107,10 @@ fn internal(e: std::io::Error) -> Response {
     )
 }
 fn details(record: &Record, base: &str) -> serde_json::Value {
-    json!({ "url": format!("{base}/{}", record.id) })
+    let expires_at = chrono::DateTime::from_timestamp_millis(record.expires_at as i64)
+        .unwrap()
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    json!({ "url": format!("{base}/{}", record.id), "expires_at": expires_at })
 }
 async fn upload(State(app): State<App>, headers: HeaderMap, body: Body) -> Response {
     save(app, headers, body, false, None).await
@@ -147,6 +162,34 @@ async fn remove(State(app): State<App>, Path(id): Path<String>, headers: HeaderM
     match tokio::spawn(async move { app.store.delete(&id, &key).await }).await {
         Ok(Ok(true)) => StatusCode::NO_CONTENT.into_response(),
         Ok(Ok(false)) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Err(e)) => mutation_error(e),
+        Err(e) => internal(std::io::Error::other(e)),
+    }
+}
+#[derive(Deserialize)]
+struct Renewal {
+    expires_in_seconds: u64,
+}
+async fn renew(
+    State(app): State<App>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    Json(input): Json<Renewal>,
+) -> Response {
+    if !(1..=storage::MAX_LIFETIME_SECONDS).contains(&input.expires_in_seconds) {
+        return error(
+            StatusCode::BAD_REQUEST,
+            "expires_in_seconds must be between 1 and 31536000.",
+        );
+    }
+    if let Err(response) = check_key(&app, &id, &headers).await {
+        return response;
+    }
+    let key = bearer(&headers).unwrap().to_owned();
+    let store = app.store.clone();
+    match tokio::spawn(async move { store.renew(&id, &key, input.expires_in_seconds).await }).await
+    {
+        Ok(Ok(record)) => Json(details(&record, &app.base)).into_response(),
         Ok(Err(e)) => mutation_error(e),
         Err(e) => internal(std::io::Error::other(e)),
     }

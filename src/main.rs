@@ -8,8 +8,7 @@ use storage::Store;
 async fn main() -> std::io::Result<()> {
     let store = Store::open(
         PathBuf::from(std::env::var("ABOX_DATA_DIR").unwrap_or_else(|_| "data".into())),
-        capacity("ABOX_SMALL_CAPACITY_MIB", 256)?,
-        capacity("ABOX_LARGE_CAPACITY_MIB", 384)?,
+        capacity("ABOX_CAPACITY_MIB", 640)?,
     )
     .await?;
     let base = std::env::var("ABOX_PUBLIC_URL")
