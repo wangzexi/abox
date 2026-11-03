@@ -163,8 +163,13 @@ def check():
                 time.sleep(.02)
             assert request('GET', path)[2] == b'hello'
             auth = {'Authorization':'Bearer '+data['key'], 'Content-Type':'text/plain'}
-            updated = request('PUT', path, b'updated text', auth)
-            assert updated[0] == 200 and json.loads(updated[2])['url'] == data['url'] and 'expires_at' in json.loads(updated[2])
+            deadline = time.monotonic()+5
+            while True:
+                updated = request('PUT', path, b'updated text', auth)
+                if updated[0] != 429: break
+                assert time.monotonic() < deadline, 'upload permit not released after disconnect'
+                time.sleep(.05)
+            assert updated[0] == 200 and json.loads(updated[2])['url'] == data['url'] and 'expires_at' in json.loads(updated[2]), updated
             assert request('GET', path)[2] == b'updated text'
             # Hashes persist; a restart retains the update and its original management key.
             meta_path = Path(directory)/'.metadata'/(path[1:]+'.json')
